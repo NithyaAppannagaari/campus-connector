@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { draw } from "./game/render";
-import { Building, H, TILE, W, World, buildingById } from "./game/world";
+import { Building, H, TILE, W, World, buildingById, fmtClock } from "./game/world";
+import { fmtRange, gcalUrl, inMinutes } from "./calendar";
+import { Settings, checkNotify, inQuietHours, loadSettings, saveSettings } from "./settings";
+import { awardAccept, breakStreak, loadRewards, saveRewards } from "./rewards";
+import { SerendipityEvent, describeSerendipity, generateSerendipity } from "./serendipity";
+import SettingsPanel from "./components/SettingsPanel";
+import OpenNowCard from "./components/OpenNowCard";
+import PointsPill from "./components/PointsPill";
 import PhonePanel, { CreatorPrefill } from "./messages/PhonePanel";
 import { CANDIDATES, HISTORY } from "./messages/history";
 import { createRealEvent, fetchEvent, Mutual, PartifulEvent } from "./messages/partiful";
@@ -23,6 +30,7 @@ interface Toast {
   id: string;
   text: string;
   expiresAt: number;
+  serendipity?: SerendipityEvent;
 }
 
 interface Ticker {
@@ -36,6 +44,20 @@ const VIBE_TO_CREATOR: Record<string, CreatorCategory> = {
   food: "hangout",
   chaos: "party",
 };
+
+const VIBE_ACTIVITY: Record<Building["vibe"], string> = {
+  gym: "Workout",
+  study: "Study session",
+  food: "Meal",
+  chaos: "Hangout",
+};
+
+/** "Maya", "Maya & Dev", or "Maya +2" */
+function nameList(friendNames: string[]): string {
+  if (friendNames.length === 0) return "your circle";
+  if (friendNames.length <= 2) return friendNames.join(" & ");
+  return `${friendNames[0]} +${friendNames.length - 1}`;
+}
 
 export default function App() {
   const [profile, setProfile] = useState<UserProfile | null>(() => loadProfile());
@@ -81,20 +103,27 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
   const [ticker, setTicker] = useState<Ticker | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [ghost, setGhost] = useState(profile.privacy.ghostByDefault);
+  const [settings, setSettings] = useState<Settings>(loadSettings);
+  const [rewards, setRewards] = useState(loadRewards);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [mutedCount, setMutedCount] = useState(0);
+  const [, setPulse] = useState(0);
   const [creatorPrefill, setCreatorPrefill] = useState<CreatorPrefill | null>(null);
   const [focusThread, setFocusThread] = useState<{ id: string; nonce: number } | null>(null);
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selectedId;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const idRef = useRef(1);
   const uid = useCallback(() => String(idRef.current++), []);
-  // quick-action handlers live outside React state; dispatcher passes the notif id back in
   const handlersRef = useRef<Record<string, (actionId: string, notifId: string) => void>>({});
 
-  // ---- notification bus --------------------------------------------------
+  useEffect(() => saveSettings(settings), [settings]);
+  useEffect(() => saveRewards(rewards), [rewards]);
 
-  const toast = useCallback((text: string, ttl = 6000) => {
+  const toast = useCallback((text: string, ttl = 6000, serendipity?: SerendipityEvent) => {
     const id = uid();
-    setToasts((t) => [...t, { id, text, expiresAt: Date.now() + ttl }]);
+    setToasts((t) => [...t, { id, text, expiresAt: Date.now() + ttl, serendipity }]);
   }, [uid]);
 
   const say = useCallback((text: string, ms = 4500) => {
@@ -120,8 +149,6 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
     delete handlersRef.current[id];
   }, []);
 
-  // ---- threads -------------------------------------------------------------
-
   const ensureThread = useCallback(
     (id: string, title: string, category: EventCategory, source?: EventSource) => {
       setThreads((ts) =>
@@ -143,7 +170,6 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
     setThreads((ts) =>
       ts.map((t) => {
         if (t.id !== threadId) return t;
-        // a friend reply means your earlier messages were read
         const messages = outgoing
           ? t.messages
           : t.messages.map((m) => (m.status ? { ...m, status: "read" as const } : m));
@@ -192,8 +218,6 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
       ),
     );
   }, []);
-
-  // ---- live Partiful event tracking (real, confirmed read endpoints) --------
 
   const pollTimers = useRef<Record<string, number>>({});
 
@@ -250,7 +274,6 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
     return () => Object.values(timers).forEach((id) => window.clearInterval(id));
   }, []);
 
-  /** One event = one thread: staged bubbles, typing indicators, receipt chips. */
   const stageThread = useCallback(
     (
       threadId: string,
@@ -261,7 +284,6 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
       for (const m of msgs) {
         const isFriend = m.from !== "agent" && m.from !== "you";
         if (isFriend) {
-          // show "typing..." dots before the reply lands
           const typingAt = Math.max(prevDelay + 150, m.delay - 1300);
           setTimeout(() => setTyping(threadId, m.from), typingAt);
         }
@@ -272,8 +294,6 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
     },
     [addMsg, addReceipt, setTyping],
   );
-
-  // ---- recommendation engine over imported history -------------------------
 
   const recs = useMemo(() => recommend(HISTORY, CANDIDATES), []);
   const digest = useMemo(() => recs.filter((r) => r.decision === "digest"), [recs]);
@@ -287,6 +307,18 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
       setFocusThread({ id: e.id, nonce: Date.now() });
       say("RSVPing on Partiful + inviting your crew...");
       const crew = names(rec.autoInvite);
+      const start = inMinutes(60);
+      const calTitle = `${e.title} w/ ${crew}`;
+      const calLink = gcalUrl({
+        title: calTitle,
+        start,
+        durationMin: 120,
+        location: "campus",
+        details: [
+          `${e.title} with ${crew}.`,
+          `RSVP'd via ConnectMaxxer · Partiful crew auto-invited.`,
+        ].join("\n"),
+      });
       stageThread(
         e.id,
         [
@@ -294,6 +326,11 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
           { delay: 1300, from: "agent", text: `Auto-invited your watch-party crew: ${crew} — they co-attended your last ${rec.autoInvite.length}+ parties.` },
           { delay: 2800, from: "Maya", text: "YESSS ok locking in snacks" },
           { delay: 4000, from: "Sam", text: "bringing the projector \u{1F525}" },
+          {
+            delay: 5200,
+            from: "agent",
+            text: `"${calTitle}" \u{2192} Google Calendar (${fmtRange(start, 120)}): ${calLink}`,
+          },
         ],
         [
           { delay: 600, label: "Partiful RSVP" },
@@ -313,12 +350,30 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
       ensureThread(e.id, e.title, e.category, e.source);
       setFocusThread({ id: e.id, nonce: Date.now() });
       say("Locking your spot + pinging the roster...");
+      const roster = names(e.friendsGoing);
+      const start = inMinutes(30);
+      const calTitle = `Pickleball w/ ${roster}`;
+      const calLink = gcalUrl({
+        title: calTitle,
+        start,
+        durationMin: 90,
+        location: "Rec Gym, campus",
+        details: [
+          `Pickleball roster filled (4/4) with ${roster}.`,
+          `Scheduled by ConnectMaxxer \u{1F3BE}`,
+        ].join("\n"),
+      });
       stageThread(
         e.id,
         [
-          { delay: 200, from: "agent", text: `You're in — roster is now full (4/4). Told ${names(rec.autoInvite)}.` },
+          { delay: 200, from: "agent", text: `You're in — roster is now full (4/4). Told ${roster}.` },
           { delay: 1600, from: "Dev", text: "ez. bringing paddles" },
           { delay: 2800, from: "Jordan", text: "loser buys celsius" },
+          {
+            delay: 4200,
+            from: "agent",
+            text: `"${calTitle}" \u{2192} Google Calendar (${fmtRange(start, 90)}): ${calLink}`,
+          },
         ],
         [
           { delay: 600, label: "Doorlist spot" },
@@ -393,7 +448,6 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
           },
         );
       } else {
-        // pop-ups and brand drops: time-boxed push
         notify(
           {
             kind: "popup",
@@ -417,8 +471,6 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
     [notify, acceptInvite, joinQuorum, claimDrop, dismissNotif],
   );
 
-  // ---- game loop -----------------------------------------------------------
-
   useEffect(() => {
     const canvas = canvasRef.current!;
     const ctx = canvas.getContext("2d")!;
@@ -432,14 +484,26 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
         if (ev.type === "arrive") {
           const f = world.friends.find((x) => x.id === ev.friendId)!;
           const b = buildingById(ev.buildingId);
-          const others = world.friendsInside(b.id).filter((x) => x.id !== f.id).length;
-          const extra = others > 0 ? ` — ${others} other${others > 1 ? "s" : ""} from your circle there` : "";
-          notify(
-            { kind: "presence", title: `${f.name} checked in`, body: `${b.name}${extra}` },
-            { toast: true },
-          );
+          const decision = checkNotify(settingsRef.current, world.clockMin, f.id, b);
+          if (decision.ok) {
+            const others = world.friendsInside(b.id).filter((x) => x.id !== f.id).length;
+            const extra = others > 0 ? ` — ${others} other${others > 1 ? "s" : ""} from your circle there` : "";
+            notify(
+              { kind: "presence", title: `${f.name} checked in`, body: `${b.name}${extra}` },
+              { toast: true },
+            );
+          } else if (decision.reason !== "private-space") {
+            setMutedCount((c) => c + 1);
+          }
         } else if (ev.type === "playerArrive") {
-          toast(`You checked in at ${buildingById(ev.buildingId).name}`);
+          const b = buildingById(ev.buildingId);
+          if (!b.isPublic) {
+            toast(`You checked in at ${b.name} — private space, no one was pinged`);
+          } else if (world.player.ghost) {
+            toast(`You checked in at ${b.name} — ghost mode, no one was pinged`);
+          } else {
+            toast(`You checked in at ${b.name}`);
+          }
         }
       }
       draw(ctx, world, t, selectedRef.current);
@@ -449,13 +513,20 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
     return () => cancelAnimationFrame(raf);
   }, [world, notify, toast]);
 
-  // ---- 1s pulse: clock, countdowns, expiry ----------------------------------
-
   useEffect(() => {
     const iv = setInterval(() => {
       const t = Date.now();
       setNow(t);
-      setToasts((list) => list.filter((x) => x.expiresAt > t));
+      setPulse((p) => p + 1);
+      setToasts((list) => {
+        const expired = list.filter((x) => x.expiresAt <= t);
+        for (const e of expired) {
+          if (e.serendipity) {
+            setRewards((r) => breakStreak(r));
+          }
+        }
+        return list.filter((x) => x.expiresAt > t);
+      });
       setTicker((tk) => (tk && tk.until > t ? tk : null));
       setNotifs((list) => {
         const expired = list.filter((n) => n.expiresAt && n.expiresAt <= t);
@@ -469,7 +540,27 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
     return () => clearInterval(iv);
   }, [toast]);
 
-  // ---- demo schedule ---------------------------------------------------------
+  useEffect(() => {
+    let timer = 0;
+    const schedule = (delay: number) => {
+      timer = window.setTimeout(() => {
+        const s = settingsRef.current;
+        if (
+          profile.privacy.serendipityOptIn &&
+          s.notifsOn &&
+          !inQuietHours(world.clockMin, s.quiet)
+        ) {
+          const ev = generateSerendipity(world, s.hobbies);
+          if (ev) {
+            toast(describeSerendipity(ev, buildingById(ev.buildingId).name), 60000, ev);
+          }
+        }
+        schedule(55000 + Math.random() * 30000);
+      }, delay);
+    };
+    schedule(25000);
+    return () => clearTimeout(timer);
+  }, [world, toast, profile.privacy.serendipityOptIn]);
 
   useEffect(() => {
     const timers: number[] = [];
@@ -477,40 +568,8 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
       if (rec.decision !== "push") continue;
       timers.push(window.setTimeout(() => pushRec(rec), rec.event.demoAt));
     }
-    // serendipity: vanishing micro-event
-    timers.push(
-      window.setTimeout(() => {
-        notify(
-          {
-            kind: "popup",
-            title: "Serendipity",
-            body: "3 people free near the fountain \u{00B7} 20-min window",
-            category: "popup",
-            expiresAt: Date.now() + 60000,
-            ttlMs: 60000,
-            actions: [{ id: "accept", label: "ACCEPT" }],
-          },
-          {
-            toast: true,
-            onAction: (_a, nid) => {
-              dismissNotif(nid);
-              ensureThread("serendipity", "Fountain serendipity", "popup");
-              setFocusThread({ id: "serendipity", nonce: Date.now() });
-              stageThread(
-                "serendipity",
-                [{ delay: 200, from: "agent", text: "Locked it. Fountain in 5 — telling the other 3." }],
-                [{ delay: 800, label: "GCal (20 min)" }],
-              );
-              toast("Serendipity accepted — fountain in 5");
-            },
-          },
-        );
-      }, 36000),
-    );
     return () => timers.forEach(clearTimeout);
-  }, [recs, pushRec, notify, dismissNotif, ensureThread, stageThread, toast]);
-
-  // ---- map interactions --------------------------------------------------------
+  }, [recs, pushRec]);
 
   const onCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current!.getBoundingClientRect();
@@ -525,16 +584,52 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
   };
 
   const joinBuilding = (b: Building) => {
+    const alreadyHere = world.player.state === "inside" && world.player.buildingId === b.id;
     world.sendPlayerTo(b.id);
-    const buddy = world.friendsInside(b.id)[0]?.name ?? "your circle";
-    say(`Walking you to ${b.name} \u{00B7} DMing ${buddy}...`, 6000);
+    const friends = world.friendsInside(b.id);
+    const buddy = friends[0]?.name ?? "your circle";
+    const friendNames = friends.map((f) => f.name);
+    say(
+      alreadyHere
+        ? `Already at ${b.name} — looping in ${buddy}...`
+        : `Walking you to ${b.name} \u{00B7} DMing ${buddy}...`,
+      6000,
+    );
     const threadId = `join-${b.id}`;
-    ensureThread(threadId, `${b.name} w/ ${buddy}`, b.vibe === "gym" ? "gym" : b.vibe === "study" ? "hobby" : "party");
+    ensureThread(
+      threadId,
+      `${VIBE_ACTIVITY[b.vibe]} w/ ${nameList(friendNames)}`,
+      b.vibe === "gym" ? "gym" : b.vibe === "study" ? "hobby" : "party",
+    );
+    setFocusThread({ id: threadId, nonce: Date.now() });
+    const start = inMinutes(10);
+    const title = `${VIBE_ACTIVITY[b.vibe]} w/ ${nameList(friendNames)}`;
+    const calLink = gcalUrl({
+      title,
+      start,
+      durationMin: 60,
+      location: `${b.name}, campus`,
+      details: [
+        `${VIBE_ACTIVITY[b.vibe]} with ${friendNames.join(", ") || "your circle"} at ${b.name}.`,
+        `Auto-scheduled by ConnectMaxxer \u{1F5FA}`,
+      ].join("\n"),
+    });
     const msgs = [
-      { delay: 300, from: "agent", text: `Heading to ${b.name} — told ${buddy} you're 5 min out.` },
+      {
+        delay: 300,
+        from: "agent",
+        text: alreadyHere
+          ? `You're at ${b.name} — told ${buddy} you're looping them in.`
+          : `Heading to ${b.name} — told ${buddy} you're 10 min out.`,
+      },
       { delay: 1800, from: buddy, text: "yess come thru \u{1F525}" },
+      {
+        delay: 4000,
+        from: "agent",
+        text: `"${title}" \u{2192} Google Calendar (${fmtRange(start, 60)}): ${calLink}`,
+      },
     ];
-    const receipts = [{ delay: 2600, label: "GCal 6:30\u{2013}7:30" }];
+    const receipts = [{ delay: 2600, label: "GCal" }];
     if (b.vibe === "study") receipts.push({ delay: 3400, label: "Table held 25 min" });
     if (b.vibe === "chaos" || b.vibe === "food") receipts.push({ delay: 3400, label: "Luma RSVP" });
     stageThread(threadId, msgs, receipts);
@@ -591,10 +686,28 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
           applyEvent(threadId, e);
           addReceipt(threadId, "Real Partiful created");
           addReceipt(threadId, `Real invites sent (${invitees.length})`);
+          const start = inMinutes(60);
+          const calTitle = `${title} w/ ${nameList(inviteeNames)}`;
+          const calLink = gcalUrl({
+            title: calTitle,
+            start,
+            durationMin: 120,
+            location,
+            details: [
+              `${title} with ${inviteeNames.join(", ") || "your circle"}.`,
+              `Partiful event: ${e.url}`,
+              `Created by ConnectMaxxer \u{1F5FA}`,
+            ].join("\n"),
+          });
           addMsg(
             threadId,
             "agent",
             `Done. Your real link is ${e.url}. Live RSVPs will update below every 5 seconds.`,
+          );
+          addMsg(
+            threadId,
+            "agent",
+            `"${calTitle}" \u{2192} Google Calendar (${fmtRange(start, 120)}): ${calLink}`,
           );
           connectEvent(threadId, e.url);
           toast(`Real Partiful created · ${invitees.length} invited`);
@@ -623,11 +736,61 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
     });
   };
 
+  const acceptSerendipity = (t: Toast) => {
+    const ev = t.serendipity!;
+    setToasts((ts) => ts.filter((x) => x.id !== t.id));
+    const b = buildingById(ev.buildingId);
+    world.sendPlayerTo(b.id);
+    const { next, gained, newPeople } = awardAccept(rewards, ev.people.map((p) => p.id));
+    setRewards(next);
+    const peopleNames = ev.people.map((p) => p.name).join(" & ");
+    toast(
+      `+${gained} \u{26A1}${newPeople > 0 ? ` — you're meeting ${newPeople} new ${newPeople === 1 ? "person" : "people"}` : ""}`,
+    );
+    const start = inMinutes(5);
+    const hobbyName = ev.hobby.charAt(0).toUpperCase() + ev.hobby.slice(1);
+    const title = `${hobbyName} meetup w/ ${nameList(ev.people.map((p) => p.name))}`;
+    const calLink = gcalUrl({
+      title,
+      start,
+      durationMin: ev.windowMin,
+      location: `${b.name}, campus`,
+      details: [
+        `Serendipity hangout at ${b.name} \u{2014} ${ev.windowMin}-min window.`,
+        `Meeting ${peopleNames}, matched on ${ev.hobby}.`,
+        `Set up by ConnectMaxxer \u{26A1}`,
+      ].join("\n"),
+    });
+    const threadId = `serendipity-${Date.now()}`;
+    ensureThread(threadId, title, "popup");
+    setFocusThread({ id: threadId, nonce: Date.now() });
+    stageThread(
+      threadId,
+      [
+        { delay: 200, from: "agent", text: `Locked it. Telling ${peopleNames} you're coming — intros handled.` },
+        {
+          delay: 1400,
+          from: "agent",
+          text: `"${title}" \u{2192} Google Calendar (${fmtRange(start, ev.windowMin)}): ${calLink}`,
+        },
+      ],
+      [{ delay: 800, label: `GCal (${ev.windowMin} min)` }],
+    );
+  };
+
+  const togglePlaceMute = (b: Building) => {
+    setSettings((s) => ({
+      ...s,
+      mutedPlaces: s.mutedPlaces.includes(b.id)
+        ? s.mutedPlaces.filter((x) => x !== b.id)
+        : [...s.mutedPlaces, b.id],
+    }));
+  };
+
   const onNotifAction = (notifId: string, actionId: string) => {
     handlersRef.current[notifId]?.(actionId, notifId);
   };
 
-  /** Demo/testing control: re-fire every push-tier recommendation. */
   const replayPushes = () => {
     for (const rec of recs) {
       if (rec.decision === "push") pushRec(rec);
@@ -638,6 +801,9 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
   const selected = selectedId ? buildingById(selectedId) : null;
   const selectedFriends = selected ? world.friendsInside(selected.id) : [];
   const selectedOcc = selected ? world.displayOccupancy(selected) : 0;
+  const selectedOpen = selected ? world.isOpen(selected) : false;
+  const playerHere = !!selected && world.player.state === "inside" && world.player.buildingId === selected.id;
+  const playerEnRoute = !!selected && world.player.state === "walking" && world.player.buildingId === selected.id;
 
   return (
     <div className="app">
@@ -645,6 +811,11 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
         <header className="topbar">
           <span className="logo">🗺 ConnectMaxxer</span>
           <span className="tagline">the campus map that texts your friends for you</span>
+          <span className="clock">🕓 {fmtClock(world.clockMin)}</span>
+          <PointsPill rewards={rewards} />
+          <button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="settings">
+            {"\u{2699}\u{FE0F}"}
+          </button>
           <button className={`ghost-btn ${ghost ? "on" : ""}`} onClick={toggleGhost}>
             {ghost ? "\u{1F47B} GHOST ON" : "\u{1F47B} GHOST OFF"}
           </button>
@@ -654,8 +825,14 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
           <canvas ref={canvasRef} width={W} height={H} onClick={onCanvasClick} className="map-canvas" />
           <div className="toasts">
             {toasts.map((t) => (
-              <div key={t.id} className="toast">
+              <div key={t.id} className={`toast ${t.serendipity ? "serendipity" : ""}`}>
                 <span>{t.text}</span>
+                {t.serendipity && (
+                  <span className="toast-actions">
+                    <b>{Math.max(0, Math.ceil((t.expiresAt - Date.now()) / 1000))}s</b>
+                    <button onClick={() => acceptSerendipity(t)}>ACCEPT</button>
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -670,6 +847,7 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
           <span><i style={{ background: "#e04a4a" }} /> gym</span>
           <span><i style={{ background: "#e0913f" }} /> food</span>
           <span><i style={{ background: "#c94ad6" }} /> chaos</span>
+          <span>🔒 private</span>
           <span className="legend-hint">click a building · 💤 = dead zone, go start something</span>
         </div>
       </div>
@@ -689,9 +867,20 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
             <div className="card-title">
               {selected.emoji} {selected.name.toUpperCase()}
             </div>
+            <p className="status-line">
+              {selected.isPublic ? (
+                selectedOpen ? (
+                  <>🟢 Open · closes {fmtClock(selected.closeMin)} · public</>
+                ) : (
+                  <>🔴 Closed · opens {fmtClock(selected.openMin)}</>
+                )
+              ) : (
+                <>🔒 Private space — check-ins here never notify anyone</>
+              )}
+            </p>
             <p>
               {selectedOcc} inside
-              {selected.openSpots !== null && <> · {selected.openSpots} open tables</>}
+              {selected.openSpots !== null && selectedOpen && <> · {selected.openSpots} open spots</>}
               {selectedOcc <= 1 && <> · 💤 dead zone</>}
             </p>
             <p className="friends-line">
@@ -700,8 +889,19 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
                 : "No one from your circle here yet."}
             </p>
             <div className="btn-row">
-              <button className="btn join" onClick={() => joinBuilding(selected)}>JOIN</button>
+              <button
+                className="btn join"
+                onClick={() => joinBuilding(selected)}
+                disabled={!selectedOpen || playerHere || playerEnRoute}
+              >
+                {playerHere ? "\u2713 HERE" : playerEnRoute ? "EN ROUTE\u2026" : "JOIN"}
+              </button>
               <button className="btn create" onClick={() => openCreator(selected)}>CREATE</button>
+              {selected.isPublic && (
+                <button className="btn" onClick={() => togglePlaceMute(selected)}>
+                  {settings.mutedPlaces.includes(selected.id) ? "\u{1F507} UNMUTE" : "MUTE"}
+                </button>
+              )}
               <button className="btn" onClick={() => setSelectedId(null)}>CLOSE</button>
             </div>
           </div>
@@ -710,6 +910,15 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
             <p>Click a vibe bubble to join or create. Everything else lands on the phone — invites, quorums, drops.</p>
           </div>
         )}
+
+        <OpenNowCard
+          world={world}
+          onSelect={(id) => setSelectedId(id)}
+          onGo={(b) => {
+            setSelectedId(b.id);
+            joinBuilding(b);
+          }}
+        />
 
         <PhonePanel
           notifs={notifs}
@@ -726,6 +935,20 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
           onReplay={replayPushes}
         />
       </aside>
+
+      {settingsOpen && (
+        <SettingsPanel
+          settings={settings}
+          onChange={setSettings}
+          onClose={() => setSettingsOpen(false)}
+          ghost={ghost}
+          onToggleGhost={toggleGhost}
+          friends={world.friends}
+          buildings={world.buildings}
+          clockMin={world.clockMin}
+          mutedCount={mutedCount}
+        />
+      )}
     </div>
   );
 }

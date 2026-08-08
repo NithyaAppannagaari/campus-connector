@@ -30,6 +30,10 @@ export interface Building {
   bottom: boolean; // sits on the bottom rail
   base: number; // ambient non-friend occupancy
   openSpots: number | null; // open tables/racks, null = untracked
+  isPublic: boolean; // private spaces never generate check-in notifications
+  openMin: number; // opening time, minutes on the campus clock
+  closeMin: number; // closing time, minutes on the campus clock
+  dropIn: boolean; // shows up in the "open now" drop-in list
 }
 
 export type Tile = "grass" | "path" | "tree" | "water" | "flower" | "rim" | "bush";
@@ -67,38 +71,60 @@ export type WorldEvent =
 
 const SPEED = 52; // px per second
 
+const HM = (h: number, m = 0) => h * 60 + m;
+
 export const BUILDINGS: Building[] = [
   {
     id: "gym", name: "Rec Gym", vibe: "gym", emoji: "\u{1F4AA}",
     x: 2, y: 2, w: 7, h: 5,
-    roof: "#6e7b8a", roofDark: "#4f5966", wall: "#a39a88",
-    bottom: false, base: 3, openSpots: null,
+    roof: "#5b6273", roofDark: "#454b59", wall: "#8d93a3",
+    bottom: false, base: 3, openSpots: 4,
+    isPublic: true, openMin: HM(6), closeMin: HM(23), dropIn: true,
   },
   {
     id: "pods", name: "Study Pods", vibe: "study", emoji: "\u{1F4DA}",
     x: 13, y: 2, w: 6, h: 4,
     roof: "#c9a04e", roofDark: "#987434", wall: "#e8ddc0",
     bottom: false, base: 1, openSpots: 3,
+    isPublic: true, openMin: HM(8), closeMin: HM(17), dropIn: true,
   },
   {
     id: "library", name: "Moffitt 3rd", vibe: "study", emoji: "\u{1F4DA}",
     x: 23, y: 2, w: 7, h: 6,
     roof: "#8a5a3a", roofDark: "#654028", wall: "#e8dcc0",
     bottom: false, base: 5, openSpots: 2,
+    isPublic: true, openMin: HM(8), closeMin: HM(24), dropIn: true,
   },
   {
     id: "dining", name: "Dining Hall", vibe: "food", emoji: "\u{1F355}",
     x: 2, y: 13, w: 7, h: 5,
     roof: "#b5493c", roofDark: "#84352c", wall: "#f0e2c8",
     bottom: true, base: 4, openSpots: null,
+    isPublic: true, openMin: HM(7), closeMin: HM(20), dropIn: true,
+  },
+  {
+    id: "dorms", name: "Dorms", vibe: "chaos", emoji: "\u{1F6CF}\u{FE0F}",
+    x: 18, y: 15, w: 4, h: 3,
+    roof: "#8a5bd6", roofDark: "#63409e", wall: "#e2d4ef",
+    bottom: true, base: 2, openSpots: null,
+    isPublic: false, openMin: HM(0), closeMin: HM(24), dropIn: false,
   },
   {
     id: "union", name: "Student Union", vibe: "chaos", emoji: "\u{1F389}",
     x: 23, y: 13, w: 7, h: 5,
     roof: "#c9853f", roofDark: "#95612b", wall: "#efe3cb",
     bottom: true, base: 2, openSpots: null,
+    isPublic: true, openMin: HM(8), closeMin: HM(22), dropIn: true,
   },
 ];
+
+export function fmtClock(min: number): string {
+  const m = ((Math.floor(min) % 1440) + 1440) % 1440;
+  const h24 = Math.floor(m / 60);
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  const mm = String(m % 60).padStart(2, "0");
+  return `${h12}:${mm} ${h24 < 12 ? "AM" : "PM"}`;
+}
 
 export function buildingById(id: string): Building {
   return BUILDINGS.find((b) => b.id === id)!;
@@ -142,7 +168,7 @@ export function buildTiles(): Tile[][] {
   // building spurs
   for (let y = 7; y <= 10; y++) path(5, y);
   for (let y = 8; y <= 10; y++) path(26, y);
-  path(5, 18); path(26, 18);
+  path(5, 18); path(26, 18); path(20, 18);
   // fountain
   t[10][13] = "water"; t[10][14] = "water";
   t[11][13] = "water"; t[11][14] = "water";
@@ -212,6 +238,8 @@ export class World {
   friends: Friend[];
   player: Player;
   events: WorldEvent[] = [];
+  /** campus clock in minutes; runs at 1 sim-minute per real second */
+  clockMin = 16 * 60 + 20;
   private driftAt = 0;
   private forced: { at: number; friendId: string; targetId: string }[] = [];
 
@@ -230,7 +258,7 @@ export class World {
     this.friends = [
       mk("maya", "Maya", "#e04a4a", "#2a1b12", "dining", 999999, { gym: 5, dining: 1, union: 1 }),
       mk("dev", "Dev", "#4a7fd6", "#111318", "library", 14000, { library: 4, pods: 2, dining: 1 }),
-      mk("sam", "Sam", "#3fae62", "#5b3a1e", "dining", 20000, { dining: 2, union: 2, gym: 1 }),
+      mk("sam", "Sam", "#3fae62", "#5b3a1e", "dining", 20000, { dining: 2, union: 2, gym: 1, dorms: 3 }),
       mk("priya", "Priya", "#9a5bd6", "#17111e", "pods", 26000, { pods: 3, library: 2, union: 1 }),
       mk("jordan", "Jordan", "#e0913f", "#3d2c16", "union", 32000, { union: 3, dining: 2, gym: 1 }),
     ];
@@ -248,6 +276,16 @@ export class World {
     return this.friends.filter((f) => f.state === "inside" && f.buildingId === buildingId);
   }
 
+  isOpen(b: Building): boolean {
+    return this.clockMin >= b.openMin && this.clockMin < b.closeMin;
+  }
+
+  /** minutes until close; null if closed or 24h */
+  minutesToClose(b: Building): number | null {
+    if (!this.isOpen(b) || (b.openMin === 0 && b.closeMin === 24 * 60)) return null;
+    return Math.round(b.closeMin - this.clockMin);
+  }
+
   displayOccupancy(b: Building): number {
     let n = b.base + this.friendsInside(b.id).length;
     if (this.player.state === "inside" && this.player.buildingId === b.id) n += 1;
@@ -255,6 +293,8 @@ export class World {
   }
 
   sendPlayerTo(buildingId: string) {
+    // already inside — nothing to walk
+    if (this.player.state === "inside" && this.player.buildingId === buildingId) return;
     const to = buildingById(buildingId);
     const from =
       this.player.state === "inside" && this.player.buildingId
@@ -267,7 +307,10 @@ export class World {
   }
 
   private pickTarget(f: Friend): string {
-    const entries = Object.entries(f.prefs).filter(([id]) => id !== f.buildingId);
+    let entries = Object.entries(f.prefs).filter(
+      ([id]) => id !== f.buildingId && this.isOpen(buildingById(id)),
+    );
+    if (entries.length === 0) entries = Object.entries(f.prefs).filter(([id]) => id !== f.buildingId);
     const total = entries.reduce((s, [, w]) => s + w, 0);
     let r = Math.random() * total;
     for (const [id, w] of entries) {
@@ -309,6 +352,7 @@ export class World {
   }
 
   tick(dt: number, now: number) {
+    this.clockMin += dt; // 1 sim-minute per real second
     // scripted moves
     for (const s of this.forced.filter((s) => now >= s.at)) {
       const f = this.friends.find((x) => x.id === s.friendId)!;
@@ -341,10 +385,14 @@ export class World {
       }
     }
 
-    // ambient occupancy / open-spot drift
+    // ambient occupancy / open-spot drift; closed buildings empty out
     if (now >= this.driftAt) {
       this.driftAt = now + 6000;
       for (const b of this.buildings) {
+        if (!this.isOpen(b)) {
+          b.base = Math.max(0, b.base - 2);
+          continue;
+        }
         b.base = Math.max(0, Math.min(9, b.base + (Math.random() < 0.5 ? -1 : 1)));
         if (b.openSpots !== null) {
           b.openSpots = Math.max(0, Math.min(6, b.openSpots + (Math.random() < 0.5 ? -1 : 1)));

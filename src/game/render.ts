@@ -298,13 +298,14 @@ function drawBuilding(
   drawShingleRoof(ctx, px, py, pw, roofH, b.roof, b.roofDark);
   if (b.vibe === "food") drawChimney(ctx, px + pw - 16, py + 5, time);
 
-  // windows — lit count follows occupancy
+  // windows — lit count follows occupancy, all dark when closed
+  const open = world.isOpen(b);
   const occ = world.displayOccupancy(b);
   const winCount = b.w - 2;
   const wy = wallY + 6;
   for (let i = 0; i < winCount; i++) {
     const wx = px + TILE * (i + 1) + 3;
-    const lit = i < occ;
+    const lit = open && i < occ;
     ctx.fillStyle = WOOD_DARK;
     ctx.fillRect(wx - 1, wy - 1, 10, 11);
     ctx.fillStyle = lit ? "#ffd94e" : "#57657c";
@@ -345,12 +346,13 @@ function drawBuilding(
     }
   }
 
-  // hanging wooden sign
+  // hanging wooden sign (private spaces get a lock)
+  const plate = b.isPublic ? b.name : `\u{1F512} ${b.name}`;
   ctx.font = "7px 'Press Start 2P', monospace";
   ctx.textAlign = "center";
   const nx = px + pw / 2;
   const ny = py + roofH - 5;
-  const tw = ctx.measureText(b.name).width;
+  const tw = ctx.measureText(plate).width;
   ctx.fillStyle = WOOD_DARK;
   ctx.fillRect(nx - tw / 2 - 4, ny - 9, tw + 8, 13);
   ctx.fillStyle = WOOD;
@@ -358,7 +360,15 @@ function drawBuilding(
   ctx.fillStyle = "rgba(255,255,255,0.15)";
   ctx.fillRect(nx - tw / 2 - 3, ny - 8, tw + 6, 2);
   ctx.fillStyle = CREAM;
-  ctx.fillText(b.name, nx, ny);
+  ctx.fillText(plate, nx, ny);
+
+  if (!open) {
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    const ctw = ctx.measureText("CLOSED").width;
+    ctx.fillRect(nx - ctw / 2 - 3, ny + 4, ctw + 6, 11);
+    ctx.fillStyle = "#ff7b6b";
+    ctx.fillText("CLOSED", nx, ny + 12);
+  }
 
   if (selected) {
     ctx.strokeStyle = "#ffd94e";
@@ -370,13 +380,14 @@ function drawBuilding(
 }
 
 function drawBubble(ctx: CanvasRenderingContext2D, b: Building, world: World, time: number) {
+  const open = world.isOpen(b);
   const occ = world.displayOccupancy(b);
   const friends = world.friendsInside(b.id).length;
   const cx = (b.x + b.w / 2) * TILE;
   const cy = b.y * TILE - 14;
-  const pulse = Math.sin(time / 400 + b.x) * 1.5;
+  const pulse = open ? Math.sin(time / 400 + b.x) * 1.5 : 0;
   const r = 10 + Math.min(occ, 9) * 1.4 + pulse;
-  const color = VIBE_COLOR[b.vibe];
+  const color = open ? VIBE_COLOR[b.vibe] : "#5a6070";
 
   ctx.globalAlpha = 0.35;
   ctx.fillStyle = color;
@@ -392,7 +403,7 @@ function drawBubble(ctx: CanvasRenderingContext2D, b: Building, world: World, ti
 
   ctx.font = "9px sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText(b.emoji, cx, cy - 1);
+  ctx.fillText(open ? b.emoji : "\u{1F319}", cx, cy - 1);
   ctx.font = "7px 'Press Start 2P', monospace";
   ctx.fillStyle = "#ffffff";
   ctx.strokeStyle = "rgba(0,0,0,0.7)";
@@ -410,8 +421,8 @@ function drawBubble(ctx: CanvasRenderingContext2D, b: Building, world: World, ti
     ctx.fillText(String(friends), cx + r - 1, cy - r + 6);
   }
 
-  // dead zone marker
-  if (occ <= 1) {
+  // dead zone marker (only meaningful while open)
+  if (open && occ <= 1) {
     ctx.font = "8px sans-serif";
     ctx.fillText("\u{1F4A4}", cx - r - 6, cy);
   }
