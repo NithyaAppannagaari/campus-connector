@@ -1,12 +1,13 @@
 import {
-  Building, COLS, Pt, ROWS, TILE, Vibe, World, doorTile,
+  Building, COLS, PopUp, Pt, ROWS, TILE, Vibe, World, buildingById, doorTile,
 } from "./world";
 
+/** Earthy bubble colours so the occupancy markers sit inside the world. */
 const VIBE_COLOR: Record<Vibe, string> = {
-  study: "#4a7fd6",
-  gym: "#e04a4a",
-  food: "#e0913f",
-  chaos: "#c94ad6",
+  study: "#2f5d8c",
+  gym: "#c2622a",
+  food: "#d38b2b",
+  chaos: "#7a4b96",
 };
 
 function hash(x: number, y: number): number {
@@ -238,6 +239,88 @@ function drawBubble(ctx: CanvasRenderingContext2D, b: Building, world: World, ti
   }
 }
 
+// ---- pop-up events -----------------------------------------------------
+
+/** A striped booth canopy pitched on the path beside the host building's door. */
+function drawPopUpBooth(ctx: CanvasRenderingContext2D, p: PopUp, time: number) {
+  const b = buildingById(p.buildingId);
+  const x = doorTile(b).x * TILE + 18;
+  const y = (b.y + b.h) * TILE + 3;
+  const w = 26;
+
+  ctx.fillStyle = "rgba(0,0,0,0.22)";
+  ctx.fillRect(x + 1, y + 15, w - 2, 3);
+  // legs
+  ctx.fillStyle = "#6b4423";
+  ctx.fillRect(x + 1, y + 6, 2, 9);
+  ctx.fillRect(x + w - 3, y + 6, 2, 9);
+  // table
+  ctx.fillStyle = "#e8ddc0";
+  ctx.fillRect(x, y + 8, w, 4);
+  ctx.fillStyle = "rgba(0,0,0,0.18)";
+  ctx.fillRect(x, y + 11, w, 1);
+  // striped canopy in the host's colour
+  for (let i = 0; i < w; i += 5) {
+    ctx.fillStyle = (i / 5) % 2 === 0 ? p.color : "#f8fafc";
+    ctx.fillRect(x + i, y, Math.min(5, w - i), 6);
+  }
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  ctx.fillRect(x, y + 5, w, 1);
+  // stock on the table, bobbing so the booth reads as staffed
+  const bob = Math.floor(time / 300) % 2;
+  ctx.font = "8px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(p.emoji, x + w / 2, y + 8 - bob);
+}
+
+/** Pulsing marker above the building, sized by how many friends are already there. */
+function drawPopUpPin(ctx: CanvasRenderingContext2D, p: PopUp, world: World, time: number) {
+  const b = buildingById(p.buildingId);
+  const cx = (b.x + b.w) * TILE - 4;
+  const cy = b.y * TILE - 22;
+  const beat = (time % 1400) / 1400;
+
+  ctx.save();
+  ctx.globalAlpha = 0.45 * (1 - beat);
+  ctx.strokeStyle = p.color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 8 + beat * 12, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.fillStyle = p.color;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(cx - 4, cy + 7);
+  ctx.lineTo(cx + 4, cy + 7);
+  ctx.lineTo(cx, cy + 14);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.55)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 9, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.font = "9px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(p.emoji, cx, cy + 3);
+
+  const going = p.rsvps.length + world.friendsNear(p).length;
+  if (going > 0) {
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(cx + 8, cy - 8, 5.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#0f1220";
+    ctx.font = "7px 'Press Start 2P', monospace";
+    ctx.fillText(String(going), cx + 8, cy - 5.5);
+  }
+}
+
 // ---- sprites -----------------------------------------------------------
 
 function drawPerson(
@@ -330,6 +413,9 @@ export function draw(
     drawBuilding(ctx, b, world, b.id === selectedId, time);
   }
 
+  const live = world.livePopUps();
+  for (const p of live) drawPopUpBooth(ctx, p, time);
+
   // walking sprites, sorted by y so lower ones draw on top
   const walkers: { pos: Pt; shirt: string; hair: string; ghost: boolean; label: string; moving: boolean }[] = [];
   for (const f of world.friends) {
@@ -351,4 +437,5 @@ export function draw(
   }
 
   for (const b of world.buildings) drawBubble(ctx, b, world, time);
+  for (const p of live) drawPopUpPin(ctx, p, world, time);
 }

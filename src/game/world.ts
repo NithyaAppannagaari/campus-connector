@@ -41,8 +41,10 @@ export type Tile = "grass" | "path" | "tree" | "water" | "flower" | "rim";
 export interface Friend {
   id: string;
   name: string;
+  email: string;
   shirt: string;
   hair: string;
+  hobbies: Hobby[];
   state: "inside" | "walking";
   buildingId: string;
   targetId: string | null;
@@ -51,6 +53,43 @@ export interface Friend {
   routeI: number;
   nextMoveAt: number;
   prefs: Record<string, number>; // buildingId -> weight
+}
+
+export type Hobby =
+  | "climbing" | "film" | "salsa" | "robotics"
+  | "gaming" | "music" | "food" | "fitness";
+
+export const HOBBIES: Hobby[] = [
+  "climbing", "film", "salsa", "robotics", "gaming", "music", "food", "fitness",
+];
+
+export interface Club {
+  id: string;
+  name: string;
+  hobby: Hobby;
+  emoji: string;
+  email: string;
+  members: number;
+  color: string;
+}
+
+/** A club or brand activation that appears at a building for a limited window. */
+export interface PopUp {
+  id: string;
+  hostId: string;
+  hostName: string;
+  kind: "club" | "brand";
+  title: string;
+  perk: string;
+  buildingId: string;
+  startsAt: number;
+  endsAt: number;
+  emoji: string;
+  color: string;
+  hobby: Hobby;
+  rsvps: string[]; // friend ids
+  live: boolean;
+  done: boolean;
 }
 
 export interface Player {
@@ -65,7 +104,10 @@ export interface Player {
 export type WorldEvent =
   | { type: "arrive"; friendId: string; buildingId: string }
   | { type: "depart"; friendId: string; buildingId: string }
-  | { type: "playerArrive"; buildingId: string };
+  | { type: "playerArrive"; buildingId: string }
+  | { type: "popupStart"; popUpId: string }
+  | { type: "popupEnd"; popUpId: string }
+  | { type: "nearby"; friendId: string; popUpId: string };
 
 const SPEED = 52; // px per second
 
@@ -123,6 +165,24 @@ export function fmtClock(min: number): string {
   const mm = String(m % 60).padStart(2, "0");
   return `${h12}:${mm} ${h24 < 12 ? "AM" : "PM"}`;
 }
+
+export const HOBBY_EMOJI: Record<Hobby, string> = {
+  climbing: "\u{1F9D7}",
+  film: "\u{1F3AC}",
+  salsa: "\u{1F483}",
+  robotics: "\u{1F916}",
+  gaming: "\u{1F3AE}",
+  music: "\u{1F3B8}",
+  food: "\u{1F32E}",
+  fitness: "\u{1F3CB}\u{FE0F}",
+};
+
+export const SEED_CLUBS: Club[] = [
+  { id: "climb", name: "Send It Climbing", hobby: "climbing", emoji: HOBBY_EMOJI.climbing, email: "climb@campus.edu", members: 84, color: "#ea580c" },
+  { id: "cinema", name: "Midnight Cinema", hobby: "film", emoji: HOBBY_EMOJI.film, email: "cinema@campus.edu", members: 132, color: "#2563eb" },
+  { id: "salsa", name: "Salsa Society", hobby: "salsa", emoji: HOBBY_EMOJI.salsa, email: "salsa@campus.edu", members: 57, color: "#db2777" },
+  { id: "robo", name: "Robotics Lab", hobby: "robotics", emoji: HOBBY_EMOJI.robotics, email: "robo@campus.edu", members: 61, color: "#0d9488" },
+];
 
 export function buildingById(id: string): Building {
   return BUILDINGS.find((b) => b.id === id)!;
@@ -231,19 +291,25 @@ export class World {
   tiles = buildTiles();
   buildings = BUILDINGS;
   friends: Friend[];
+  clubs: Club[] = [...SEED_CLUBS];
+  popUps: PopUp[] = [];
   player: Player;
   events: WorldEvent[] = [];
   /** campus clock in minutes; runs at 1 sim-minute per real second */
   clockMin = 16 * 60 + 20;
   private driftAt = 0;
   private forced: { at: number; friendId: string; targetId: string }[] = [];
+  private seenNearby = new Set<string>();
+  private popUpSeq = 0;
+  private clubSeq = 0;
 
   constructor(now: number) {
     const mk = (
-      id: string, name: string, shirt: string, hair: string,
-      buildingId: string, firstMoveIn: number, prefs: Record<string, number>,
+      id: string, name: string, email: string, shirt: string, hair: string,
+      buildingId: string, firstMoveIn: number, hobbies: Hobby[],
+      prefs: Record<string, number>,
     ): Friend => ({
-      id, name, shirt, hair,
+      id, name, email, shirt, hair, hobbies,
       state: "inside", buildingId, targetId: null,
       pos: doorOut(buildingById(buildingId)),
       route: [], routeI: 0,
@@ -251,11 +317,11 @@ export class World {
       prefs,
     });
     this.friends = [
-      mk("maya", "Maya", "#e04a4a", "#2a1b12", "dining", 999999, { gym: 5, dining: 1, union: 1 }),
-      mk("dev", "Dev", "#4a7fd6", "#111318", "library", 14000, { library: 4, pods: 2, dining: 1 }),
-      mk("sam", "Sam", "#3fae62", "#5b3a1e", "dining", 20000, { dining: 2, union: 2, gym: 1, dorms: 3 }),
-      mk("priya", "Priya", "#9a5bd6", "#17111e", "pods", 26000, { pods: 3, library: 2, union: 1 }),
-      mk("jordan", "Jordan", "#e0913f", "#3d2c16", "union", 32000, { union: 3, dining: 2, gym: 1 }),
+      mk("maya", "Maya", "maya@campus.edu", "#e04a4a", "#2a1b12", "dining", 999999, ["fitness", "climbing"], { gym: 5, dining: 1, union: 1 }),
+      mk("dev", "Dev", "dev@campus.edu", "#4a7fd6", "#111318", "library", 14000, ["robotics", "gaming"], { library: 4, pods: 2, dining: 1 }),
+      mk("sam", "Sam", "sam@campus.edu", "#3fae62", "#5b3a1e", "dining", 20000, ["food", "music"], { dining: 2, union: 2, gym: 1, dorms: 3 }),
+      mk("priya", "Priya", "priya@campus.edu", "#9a5bd6", "#17111e", "pods", 26000, ["film", "robotics"], { pods: 3, library: 2, union: 1 }),
+      mk("jordan", "Jordan", "jordan@campus.edu", "#e0913f", "#3d2c16", "union", 32000, ["salsa", "music"], { union: 3, dining: 2, gym: 1 }),
     ];
     this.player = {
       pos: { x: 18 * TILE, y: 13.5 * TILE },
@@ -264,6 +330,66 @@ export class World {
     };
     // demo beat: Maya heads to the gym a few seconds in
     this.forced.push({ at: now + 4500, friendId: "maya", targetId: "gym" });
+
+    // brand activations + a club night, staggered so the map fills up on camera
+    this.schedulePopUp({
+      hostId: "monster", hostName: "Monster Energy", kind: "brand",
+      title: "Monster recruiting table", perk: "Free cans + campus rep applications",
+      buildingId: "union", emoji: "\u{1F49A}", color: "#65d02f", hobby: "gaming",
+      startsAt: now + 9000, endsAt: now + 249000,
+    });
+    this.schedulePopUp({
+      hostId: "celsius", hostName: "Celsius", kind: "brand",
+      title: "Celsius sampling booth", perk: "Cold cans at the front desk",
+      buildingId: "gym", emoji: "\u{1F964}", color: "#38bdf8", hobby: "fitness",
+      startsAt: now + 20000, endsAt: now + 260000,
+    });
+    this.schedulePopUp({
+      hostId: "cinema", hostName: "Midnight Cinema", kind: "club",
+      title: "Rooftop screening sign-ups", perk: "Popcorn + free ticket for first 20",
+      buildingId: "pods", emoji: HOBBY_EMOJI.film, color: "#2563eb", hobby: "film",
+      startsAt: now + 34000, endsAt: now + 274000,
+    });
+  }
+
+  // ---- clubs & pop-ups --------------------------------------------------
+
+  addClub(input: { name: string; hobby: Hobby; email: string }): Club {
+    const club: Club = {
+      id: `club-${++this.clubSeq}`,
+      name: input.name,
+      hobby: input.hobby,
+      emoji: HOBBY_EMOJI[input.hobby],
+      email: input.email,
+      members: 1,
+      color: "#ea580c",
+    };
+    this.clubs.push(club);
+    return club;
+  }
+
+  schedulePopUp(input: Omit<PopUp, "id" | "rsvps" | "live" | "done">): PopUp {
+    const popUp: PopUp = { ...input, id: `pop-${++this.popUpSeq}`, rsvps: [], live: false, done: false };
+    this.popUps.push(popUp);
+    return popUp;
+  }
+
+  livePopUps(): PopUp[] {
+    return this.popUps.filter((p) => p.live && !p.done);
+  }
+
+  popUpAt(buildingId: string): PopUp | undefined {
+    return this.livePopUps().find((p) => p.buildingId === buildingId);
+  }
+
+  /** Friends inside the pop-up's building, or walking within a tile or two of its door. */
+  friendsNear(popUp: PopUp): Friend[] {
+    const b = buildingById(popUp.buildingId);
+    const door = doorOut(b);
+    return this.friends.filter((f) =>
+      (f.state === "inside" && f.buildingId === popUp.buildingId) ||
+      (f.state === "walking" && Math.hypot(f.pos.x - door.x, f.pos.y - door.y) < TILE * 3),
+    );
   }
 
   friendsInside(buildingId: string): Friend[] {
@@ -376,6 +502,28 @@ export class World {
       if (r.done) {
         this.player.state = "inside";
         this.events.push({ type: "playerArrive", buildingId: this.player.buildingId! });
+      }
+    }
+
+    // pop-up lifecycle
+    for (const p of this.popUps) {
+      if (p.done) continue;
+      if (!p.live && now >= p.startsAt) {
+        p.live = true;
+        this.events.push({ type: "popupStart", popUpId: p.id });
+      } else if (p.live && now >= p.endsAt) {
+        p.done = true;
+        this.events.push({ type: "popupEnd", popUpId: p.id });
+      }
+    }
+
+    // proximity: someone from the circle is standing where a pop-up is happening
+    for (const p of this.livePopUps()) {
+      for (const f of this.friendsNear(p)) {
+        const key = `${p.id}:${f.id}`;
+        if (this.seenNearby.has(key)) continue;
+        this.seenNearby.add(key);
+        this.events.push({ type: "nearby", friendId: f.id, popUpId: p.id });
       }
     }
 
