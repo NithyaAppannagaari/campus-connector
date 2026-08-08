@@ -328,7 +328,7 @@ export function draw(
   const pl = world.player;
   if (pl.state !== "inside") {
     walkers.push({
-      pos: pl.pos, shirt: "#f2d94e", hair: "#17111e",
+      pos: pl.pos, shirt: pl.shirt, hair: pl.hair,
       ghost: pl.ghost, label: "You", moving: pl.state === "walking",
     });
   }
