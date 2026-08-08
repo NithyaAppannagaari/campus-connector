@@ -287,6 +287,8 @@ export class World {
   }
 
   sendPlayerTo(buildingId: string) {
+    // already inside — nothing to walk
+    if (this.player.state === "inside" && this.player.buildingId === buildingId) return;
     const to = buildingById(buildingId);
     const from =
       this.player.state === "inside" && this.player.buildingId

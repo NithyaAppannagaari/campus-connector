@@ -67,9 +67,8 @@ export default function App() {
 
   const pushStaged = useCallback(
     (items: { delay: number; kind: FeedKind; text: string }[]) => {
-      for (const it of items) {
-        setTimeout(() => pushFeed(it.kind, it.text), it.delay);
-      }
+      const timers = items.map((it) => window.setTimeout(() => pushFeed(it.kind, it.text), it.delay));
+      return () => timers.forEach(clearTimeout);
     },
     [pushFeed],
   );
@@ -141,9 +140,9 @@ export default function App() {
     return () => clearInterval(iv);
   }, [pushFeed]);
 
-  // opening beats
+  // opening beats (cancel on unmount so StrictMode's double-mount doesn't duplicate them)
   useEffect(() => {
-    pushStaged([
+    return pushStaged([
       { delay: 400, kind: "agent", text: "Morning read: 2 friends free after 6, Moffitt 3rd has open tables, Luma open mic at Union tonight." },
       { delay: 1600, kind: "agent", text: "Tonight's vibe forecast: \u{1F3B2} board-game energy, not leetcode." },
     ]);
@@ -185,10 +184,16 @@ export default function App() {
   };
 
   const joinBuilding = (b: Building) => {
+    const alreadyHere = world.player.state === "inside" && world.player.buildingId === b.id;
     world.sendPlayerTo(b.id);
     const friends = world.friendsInside(b.id);
     const buddy = friends[0]?.name ?? "your circle";
-    pushFeed("agent", `On it. Heading to ${b.name} — closing the loop for you.`);
+    pushFeed(
+      "agent",
+      alreadyHere
+        ? `You're already at ${b.name} — looping in your circle.`
+        : `On it. Heading to ${b.name} — closing the loop for you.`,
+    );
     const stages: { delay: number; kind: FeedKind; text: string }[] = [
       { delay: 1200, kind: "agent", text: `DM \u{2192} ${buddy}: "Heading to ${b.name}, meet in 10?"` },
       { delay: 2600, kind: "friend", text: `${buddy}: "yess come thru \u{1F525}"` },
@@ -260,6 +265,8 @@ export default function App() {
   const selectedFriends = selected ? world.friendsInside(selected.id) : [];
   const selectedOcc = selected ? world.displayOccupancy(selected) : 0;
   const selectedOpen = selected ? world.isOpen(selected) : false;
+  const playerHere = !!selected && world.player.state === "inside" && world.player.buildingId === selected.id;
+  const playerEnRoute = !!selected && world.player.state === "walking" && world.player.buildingId === selected.id;
 
   return (
     <div className="app">
@@ -344,8 +351,12 @@ export default function App() {
                 : "No one from your circle here yet."}
             </p>
             <div className="btn-row">
-              <button className="btn join" onClick={() => joinBuilding(selected)} disabled={!selectedOpen}>
-                JOIN
+              <button
+                className="btn join"
+                onClick={() => joinBuilding(selected)}
+                disabled={!selectedOpen || playerHere || playerEnRoute}
+              >
+                {playerHere ? "\u2713 HERE" : playerEnRoute ? "EN ROUTE\u2026" : "JOIN"}
               </button>
               <button className="btn create" onClick={() => createEvent(selected)}>CREATE</button>
               {selected.isPublic && (

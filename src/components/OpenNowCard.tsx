@@ -53,17 +53,22 @@ export default function OpenNowCard({ world, onSelect, onGo }: Props) {
                       .filter(Boolean)
                       .join(" \u{00B7} ") || STATUS_LABEL[status]}
               </span>
-              {status !== "closed" && (
-                <button
-                  className="go-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onGo(b);
-                  }}
-                >
-                  GO
-                </button>
-              )}
+              {status !== "closed" && (() => {
+                const here = world.player.state === "inside" && world.player.buildingId === b.id;
+                const enRoute = world.player.state === "walking" && world.player.buildingId === b.id;
+                return (
+                  <button
+                    className="go-btn"
+                    disabled={here || enRoute}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onGo(b);
+                    }}
+                  >
+                    {here ? "\u2713" : enRoute ? "\u2026" : "GO"}
+                  </button>
+                );
+              })()}
             </div>
           );
         })}
