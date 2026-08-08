@@ -56,6 +56,8 @@ export interface Player {
   route: Pt[];
   routeI: number;
   ghost: boolean;
+  shirt: string;
+  hair: string;
 }
 
 export type WorldEvent =
@@ -236,6 +238,7 @@ export class World {
       pos: { x: 18 * TILE, y: 13.5 * TILE },
       state: "idle", buildingId: null,
       route: [], routeI: 0, ghost: false,
+      shirt: "#f2d94e", hair: "#17111e",
     };
     // demo beat: Maya heads to the gym a few seconds in
     this.forced.push({ at: now + 4500, friendId: "maya", targetId: "gym" });

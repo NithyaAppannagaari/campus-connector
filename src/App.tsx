@@ -9,6 +9,15 @@ import {
   AppNotification, CreatorCategory, EventCategory, EventSource,
   LiveEvent, Recommendation, Thread,
 } from "./messages/types";
+import Onboarding from "./onboarding/Onboarding";
+import {
+  UserProfile,
+  clearProfile,
+  loadProfile,
+  prefSummary,
+  saveProfile,
+  vibeRead,
+} from "./profile";
 
 interface Toast {
   id: string;
@@ -29,9 +38,40 @@ const VIBE_TO_CREATOR: Record<string, CreatorCategory> = {
 };
 
 export default function App() {
+  const [profile, setProfile] = useState<UserProfile | null>(() => loadProfile());
+
+  if (!profile) {
+    return (
+      <Onboarding
+        onComplete={(p) => {
+          saveProfile(p);
+          setProfile(p);
+        }}
+      />
+    );
+  }
+
+  return (
+    <MapApp
+      key={profile.onboardedAt}
+      profile={profile}
+      onRedo={() => {
+        clearProfile();
+        setProfile(null);
+      }}
+    />
+  );
+}
+
+function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const worldRef = useRef<World | null>(null);
-  if (!worldRef.current) worldRef.current = new World(performance.now());
+  if (!worldRef.current) {
+    worldRef.current = new World(performance.now());
+    worldRef.current.player.shirt = profile.avatar.shirt;
+    worldRef.current.player.hair = profile.avatar.hair;
+    worldRef.current.player.ghost = profile.privacy.ghostByDefault;
+  }
   const world = worldRef.current;
 
   const [now, setNow] = useState(Date.now());
@@ -40,10 +80,9 @@ export default function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [ticker, setTicker] = useState<Ticker | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [ghost, setGhost] = useState(false);
+  const [ghost, setGhost] = useState(profile.privacy.ghostByDefault);
   const [creatorPrefill, setCreatorPrefill] = useState<CreatorPrefill | null>(null);
   const [focusThread, setFocusThread] = useState<{ id: string; nonce: number } | null>(null);
-
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selectedId;
   const idRef = useRef(1);
@@ -637,9 +676,12 @@ export default function App() {
 
       <aside className="sidebar">
         <div className="card pref-card">
-          <div className="card-title">PREFERENCE GRAPH</div>
-          <p>Deep work Mon AM · social Thu PM · never gym after 9.</p>
-          <p className="pref-read">Tonight's read: 🎲 board-game energy</p>
+          <div className="pref-head">
+            <div className="card-title">{profile.name.toUpperCase()}'S PREFERENCE GRAPH</div>
+            <button className="pref-edit" onClick={onRedo}>EDIT</button>
+          </div>
+          <p>{prefSummary(profile)}</p>
+          <p className="pref-read">Tonight's read: {vibeRead(profile)}</p>
         </div>
 
         {selected ? (
