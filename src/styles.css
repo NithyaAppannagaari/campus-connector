@@ -1,0 +1,368 @@
+:root {
+  --bg: #0f1220;
+  --panel: #1a1d2e;
+  --panel-2: #222639;
+  --border: #343a54;
+  --text: #e8eaf2;
+  --dim: #9aa1bd;
+  --gold: #ffd94e;
+  --green: #4caf6d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+}
+
+.app {
+  display: flex;
+  gap: 14px;
+  padding: 14px;
+  height: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* ---- map column ---- */
+
+.map-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--panel);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.logo {
+  font-family: "Press Start 2P", monospace;
+  font-size: 13px;
+  color: var(--gold);
+  white-space: nowrap;
+}
+
+.tagline {
+  color: var(--dim);
+  font-size: 11px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ghost-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  color: var(--dim);
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ghost-btn.on {
+  color: #b9c6ff;
+  border-color: #6f7fd6;
+  background: #262c4a;
+  box-shadow: 0 0 10px rgba(111, 127, 214, 0.4);
+}
+
+.map-wrap {
+  position: relative;
+  background: var(--panel);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.map-canvas {
+  display: block;
+  width: 100%;
+  image-rendering: pixelated;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* ---- toasts ---- */
+
+.toasts {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(480px, 90%);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: rgba(15, 18, 32, 0.92);
+  border: 2px solid var(--gold);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  animation: pop 0.18s ease-out;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
+.toast.serendipity {
+  border-color: #c94ad6;
+  box-shadow: 0 0 16px rgba(201, 74, 214, 0.5);
+}
+
+.toast-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.toast-actions b {
+  color: #c94ad6;
+}
+
+.toast-actions button {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  padding: 6px 8px;
+  background: #c94ad6;
+  color: #fff;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+@keyframes pop {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ---- legend ---- */
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 11px;
+  color: var(--dim);
+  padding: 0 4px;
+  flex-wrap: wrap;
+}
+
+.legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+
+.legend-hint {
+  margin-left: auto;
+}
+
+/* ---- sidebar ---- */
+
+.sidebar {
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.card {
+  background: var(--panel);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.card-title {
+  font-family: "Press Start 2P", monospace;
+  font-size: 10px;
+  color: var(--gold);
+  margin-bottom: 8px;
+}
+
+.card p {
+  margin: 4px 0;
+  font-size: 12px;
+  color: var(--dim);
+  line-height: 1.5;
+}
+
+.pref-read {
+  color: var(--text) !important;
+}
+
+.building-card {
+  border-color: var(--gold);
+}
+
+.friends-line {
+  color: var(--text) !important;
+}
+
+.btn-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  padding: 9px 10px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn:hover {
+  border-color: var(--dim);
+}
+
+.btn.join {
+  background: var(--green);
+  border-color: var(--green);
+  color: #0c2214;
+}
+
+.btn.create {
+  background: #4a7fd6;
+  border-color: #4a7fd6;
+  color: #0a1428;
+}
+
+.hint-card p {
+  color: var(--dim);
+}
+
+/* ---- feed ---- */
+
+.feed-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.feed {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 4px;
+}
+
+.feed-item {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  background: var(--panel-2);
+  border-left: 3px solid var(--border);
+  border-radius: 4px;
+  padding: 7px 9px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  animation: slide 0.2s ease-out;
+}
+
+.feed-item.agent {
+  border-left-color: var(--gold);
+}
+
+.feed-item.friend {
+  border-left-color: var(--green);
+}
+
+.feed-item.cal {
+  border-left-color: #4a7fd6;
+}
+
+.feed-item.luma {
+  border-left-color: #c94ad6;
+}
+
+.feed-item.alert {
+  border-left-color: #e04a4a;
+}
+
+.feed-item.system {
+  border-left-color: #6f7fd6;
+}
+
+.feed-icon {
+  flex-shrink: 0;
+}
+
+.feed-text {
+  flex: 1;
+}
+
+.feed-time {
+  font-size: 9px;
+  color: var(--dim);
+  flex-shrink: 0;
+}
+
+@keyframes slide {
+  from {
+    transform: translateY(4px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 980px) {
+  .app {
+    flex-direction: column;
+  }
+  .sidebar {
+    width: 100%;
+  }
+  .feed {
+    max-height: 260px;
+  }
+}
