@@ -4,24 +4,32 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -n web,partiful -c cyan,magenta \"vite\" \"node server/partiful.mjs\"",
+    "dev": "concurrently -n web,mail,partiful -c cyan,magenta,yellow \"vite\" \"npm:dev:server\" \"npm:dev:partiful\"",
     "dev:web": "vite",
-    "server": "node server/partiful.mjs",
+    "dev:server": "tsx watch server/index.ts",
+    "dev:partiful": "PARTIFUL_PROXY_PORT=8788 node server/partiful.mjs",
+    "server": "npm run dev:partiful",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.21.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "gsap": "^3.15.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "resend": "^6.18.1"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.2.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
-    "concurrently": "^9.1.0",
+    "concurrently": "^10.0.4",
+    "tsx": "^4.23.11",
     "typescript": "^5.6.3",
     "vite": "^5.4.11"
   }
