@@ -1,13 +1,8 @@
 export const TILE = 16;
-export const COLS = 32;
-export const ROWS = 22;
+export const COLS = 48;
+export const ROWS = 30;
 export const W = COLS * TILE;
 export const H = ROWS * TILE;
-
-// walk "rails" — center of the main quad path, bottom path, and vertical path
-export const MAIN_Y = 12 * TILE;
-export const BOT_Y = 19.5 * TILE;
-export const VERT_X = 16 * TILE;
 
 export type Vibe = "study" | "gym" | "food" | "chaos";
 export interface Pt {
@@ -27,7 +22,6 @@ export interface Building {
   roof: string;
   roofDark: string;
   wall: string;
-  bottom: boolean; // sits on the bottom rail
   base: number; // ambient non-friend occupancy
   openSpots: number | null; // open tables/racks, null = untracked
 }
@@ -67,38 +61,87 @@ export type WorldEvent =
 
 const SPEED = 52; // px per second
 
+// The real Georgia Tech campus, Minecraft style. Positions follow the actual
+// geography (north at the top): West Village and the CRC on west campus,
+// Klaus and the CoC in central campus, Clough + Price Gilbert north of Tech
+// Green, the Student Center and Kessler Campanile beside it, Tech Tower on
+// the Hill, Brittain and Bobby Dodd down by North Ave, McCamish up NE.
 export const BUILDINGS: Building[] = [
+  // -- north of Ferst Dr ---------------------------------------------------
   {
-    id: "gym", name: "Rec Gym", vibe: "gym", emoji: "\u{1F4AA}",
-    x: 2, y: 2, w: 7, h: 5,
+    id: "westvillage", name: "West Village", vibe: "food", emoji: "\u{1F354}",
+    x: 2, y: 4, w: 6, h: 5,
+    roof: "#4b8fa8", roofDark: "#35687a", wall: "#e3d9c2",
+    base: 3, openSpots: null,
+  },
+  {
+    id: "klaus", name: "Klaus", vibe: "study", emoji: "\u{1F4BB}",
+    x: 15, y: 3, w: 7, h: 6,
+    roof: "#3f5d78", roofDark: "#2c4256", wall: "#c9b8a0",
+    base: 3, openSpots: 4,
+  },
+  {
+    id: "clough", name: "Clough (CULC)", vibe: "study", emoji: "\u{1F4DA}",
+    x: 27, y: 4, w: 6, h: 5,
+    roof: "#4caf6d", roofDark: "#37804f", wall: "#ccd6dc",
+    base: 4, openSpots: 3,
+  },
+  {
+    id: "library", name: "Price Gilbert", vibe: "study", emoji: "\u{1F4DA}",
+    x: 34, y: 4, w: 6, h: 5,
+    roof: "#2e4d7b", roofDark: "#1f3557", wall: "#e9e5d8",
+    base: 5, openSpots: 2,
+  },
+  {
+    id: "mccamish", name: "McCamish", vibe: "gym", emoji: "\u{1F3C0}",
+    x: 42, y: 3, w: 5, h: 6,
+    roof: "#d8dde3", roofDark: "#aab3bf", wall: "#8d93a3",
+    base: 2, openSpots: null,
+  },
+  // -- between Ferst Dr and the mid walk ------------------------------------
+  {
+    id: "crc", name: "The CRC", vibe: "gym", emoji: "\u{1F4AA}",
+    x: 2, y: 11, w: 7, h: 6,
     roof: "#5b6273", roofDark: "#454b59", wall: "#8d93a3",
-    bottom: false, base: 3, openSpots: null,
+    base: 3, openSpots: null,
   },
   {
-    id: "pods", name: "Study Pods", vibe: "study", emoji: "\u{1F4DA}",
-    x: 13, y: 2, w: 6, h: 4,
-    roof: "#4caf6d", roofDark: "#37804f", wall: "#e8ddc0",
-    bottom: false, base: 1, openSpots: 3,
+    id: "studentcenter", name: "Student Center", vibe: "chaos", emoji: "\u{1F389}",
+    x: 20, y: 12, w: 7, h: 5,
+    roof: "#b3a369", roofDark: "#8a7c4d", wall: "#efe3cb",
+    base: 2, openSpots: null,
+  },
+  // -- south campus, along North Ave ----------------------------------------
+  {
+    id: "coc", name: "CoC", vibe: "study", emoji: "\u{1F4BB}",
+    x: 8, y: 20, w: 6, h: 5,
+    roof: "#6f7fb8", roofDark: "#4f5c8a", wall: "#d8cfc0",
+    base: 2, openSpots: 5,
   },
   {
-    id: "library", name: "Moffitt 3rd", vibe: "study", emoji: "\u{1F4DA}",
-    x: 23, y: 2, w: 7, h: 6,
-    roof: "#4a7fd6", roofDark: "#355d9e", wall: "#e8ddc0",
-    bottom: false, base: 5, openSpots: 2,
+    id: "ferst", name: "Ferst Center", vibe: "chaos", emoji: "\u{1F3AD}",
+    x: 15, y: 20, w: 6, h: 5,
+    roof: "#a84ad6", roofDark: "#7a35a0", wall: "#e8ddc0",
+    base: 1, openSpots: null,
   },
   {
-    id: "dining", name: "Dining Hall", vibe: "food", emoji: "\u{1F355}",
-    x: 2, y: 13, w: 7, h: 5,
-    roof: "#d65a4a", roofDark: "#9e3f35", wall: "#f0e2c8",
-    bottom: true, base: 4, openSpots: null,
+    id: "brittain", name: "Brittain", vibe: "food", emoji: "\u{1F355}",
+    x: 33, y: 20, w: 5, h: 5,
+    roof: "#8f4b3d", roofDark: "#69352b", wall: "#c98a5e",
+    base: 4, openSpots: null,
   },
   {
-    id: "union", name: "Student Union", vibe: "chaos", emoji: "\u{1F389}",
-    x: 23, y: 13, w: 7, h: 5,
-    roof: "#e0913f", roofDark: "#a86a2b", wall: "#efe3cb",
-    bottom: true, base: 2, openSpots: null,
+    id: "stadium", name: "Bobby Dodd", vibe: "chaos", emoji: "\u{1F3C8}",
+    x: 39, y: 19, w: 8, h: 6,
+    roof: "#8d93a3", roofDark: "#5b6273", wall: "#8d93a3",
+    base: 1, openSpots: null,
   },
 ];
+
+// Decorative landmarks (not enterable).
+export const TECH_TOWER = { x: 29, y: 19, w: 3, h: 6 }; // on the Hill
+export const TECH_GREEN = { x: 32, y: 11, w: 9, h: 6 };
+export const POOL = { x: 28, y: 13 }; // Kessler Campanile pool (2x2)
 
 export function buildingById(id: string): Building {
   return BUILDINGS.find((b) => b.id === id)!;
@@ -111,10 +154,6 @@ export function doorTile(b: Building): Pt {
 function doorOut(b: Building): Pt {
   const d = doorTile(b);
   return { x: (d.x + 0.5) * TILE, y: (b.y + b.h + 0.4) * TILE };
-}
-
-function anchorX(b: Building): number {
-  return (doorTile(b).x + 0.5) * TILE;
 }
 
 // ---- tile map ----------------------------------------------------------
@@ -133,21 +172,24 @@ export function buildTiles(): Tile[][] {
   const path = (x: number, y: number) => {
     if (x >= 0 && x < COLS && y >= 0 && y < ROWS) t[y][x] = "path";
   };
-  // main quad path, bottom path, vertical path
-  for (let x = 1; x <= 30; x++) { path(x, 11); path(x, 12); }
-  for (let x = 3; x <= 28; x++) path(x, 19);
-  for (let y = 1; y <= 19; y++) { path(15, y); path(16, y); }
-  // plaza around the fountain
-  for (let y = 9; y <= 14; y++) for (let x = 12; x <= 19; x++) path(x, y);
-  // building spurs
-  for (let y = 7; y <= 10; y++) path(5, y);
-  for (let y = 8; y <= 10; y++) path(26, y);
-  path(5, 18); path(26, 18);
-  // fountain
-  t[10][13] = "water"; t[10][14] = "water";
-  t[11][13] = "water"; t[11][14] = "water";
-  t[9][13] = "rim"; t[9][14] = "rim";
-  t[12][13] = "rim"; t[12][14] = "rim";
+  // east-west streets: Ferst Dr (north), the mid-campus walk, North Ave
+  for (let x = 1; x <= 46; x++) {
+    path(x, 9); path(x, 10);
+    path(x, 17); path(x, 18);
+    path(x, 25); path(x, 26);
+  }
+  // north-south connectors (Atlantic Dr / Cherry St / Techwood Dr feel)
+  for (let y = 11; y <= 16; y++) { path(10, y); path(18, y); path(41, y); }
+  for (let y = 19; y <= 24; y++) { path(3, y); path(14, y); path(27, y); path(38, y); }
+  // Campanile plaza between the Student Center and Tech Green
+  for (let y = 11; y <= 16; y++) for (let x = 27; x <= 31; x++) path(x, y);
+  // diagonal-ish walk across Tech Green (kept as a straight cut)
+  for (let x = 32; x <= 40; x++) path(x, 13);
+  // Kessler Campanile reflecting pool
+  t[POOL.y][POOL.x] = "water"; t[POOL.y][POOL.x + 1] = "water";
+  t[POOL.y + 1][POOL.x] = "water"; t[POOL.y + 1][POOL.x + 1] = "water";
+  t[POOL.y - 1][POOL.x] = "rim"; t[POOL.y - 1][POOL.x + 1] = "rim";
+  t[POOL.y + 2][POOL.x] = "rim"; t[POOL.y + 2][POOL.x + 1] = "rim";
   // perimeter trees + scattered trees/flowers on grass
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
@@ -157,8 +199,15 @@ export function buildTiles(): Tile[][] {
         (b) => x >= b.x - 0 && x < b.x + b.w && y >= b.y - 1 && y < b.y + b.h,
       );
       if (inBuilding) continue;
+      const inTower =
+        x >= TECH_TOWER.x - 1 && x < TECH_TOWER.x + TECH_TOWER.w + 1 &&
+        y >= TECH_TOWER.y - 1 && y < TECH_TOWER.y + TECH_TOWER.h + 1;
+      if (inTower) continue;
+      const inGreen =
+        x >= TECH_GREEN.x && x < TECH_GREEN.x + TECH_GREEN.w &&
+        y >= TECH_GREEN.y && y < TECH_GREEN.y + TECH_GREEN.h;
       const h = hash(x, y);
-      if (edge || h % 19 === 0) t[y][x] = "tree";
+      if (edge || (!inGreen && h % 19 === 0)) t[y][x] = "tree";
       else if (h % 13 === 0) t[y][x] = "flower";
     }
   }
@@ -178,26 +227,84 @@ function dedupe(pts: Pt[]): Pt[] {
   return out;
 }
 
-/** Route along path rails from a start point (optionally leaving a building) to a target building's door. */
+// walkability grid, built once (the map is static)
+let WALK: boolean[][] | null = null;
+function walkGrid(): boolean[][] {
+  if (!WALK) WALK = buildTiles().map((row) => row.map((c) => c === "path"));
+  return WALK;
+}
+
+interface TileXY { x: number; y: number }
+
+function tileOf(p: Pt): TileXY {
+  return {
+    x: Math.max(0, Math.min(COLS - 1, Math.floor(p.x / TILE))),
+    y: Math.max(0, Math.min(ROWS - 1, Math.floor(p.y / TILE))),
+  };
+}
+
+/** BFS over street tiles. The start may be off-path (a doorway); expansion only enters path tiles. */
+function bfsPath(from: TileXY, to: TileXY): TileXY[] {
+  const walk = walkGrid();
+  const key = (x: number, y: number) => y * COLS + x;
+  const prev = new Map<number, number>();
+  const goal = key(to.x, to.y);
+  const queue: number[] = [key(from.x, from.y)];
+  prev.set(queue[0], -1);
+  for (let qi = 0; qi < queue.length; qi++) {
+    const k = queue[qi];
+    if (k === goal) break;
+    const x = k % COLS;
+    const y = (k - x) / COLS;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) continue;
+      if (!walk[ny][nx]) continue;
+      const nk = key(nx, ny);
+      if (prev.has(nk)) continue;
+      prev.set(nk, k);
+      queue.push(nk);
+    }
+  }
+  if (!prev.has(goal)) return [to]; // shouldn't happen: all doors face a street
+  const out: TileXY[] = [];
+  for (let k = goal; k !== -1; k = prev.get(k)!) {
+    const x = k % COLS;
+    out.push({ x, y: (k - x) / COLS });
+  }
+  return out.reverse();
+}
+
+/** Drop intermediate tiles that continue in the same direction, keeping corners. */
+function corners(tiles: TileXY[]): TileXY[] {
+  const out: TileXY[] = [];
+  for (let i = 0; i < tiles.length; i++) {
+    if (i === 0 || i === tiles.length - 1) {
+      out.push(tiles[i]);
+      continue;
+    }
+    const a = tiles[i - 1];
+    const b = tiles[i];
+    const c = tiles[i + 1];
+    if (b.x - a.x !== c.x - b.x || b.y - a.y !== c.y - b.y) out.push(b);
+  }
+  return out;
+}
+
+/** Route along campus streets from a start point (optionally leaving a building) to a target building's door. */
 export function routeTo(start: Pt, from: Building | null, to: Building): Pt[] {
   const pts: Pt[] = [{ ...start }];
-  let railY: number;
+  let cur = start;
   if (from) {
-    const out = doorOut(from);
-    pts.push(out);
-    railY = from.bottom ? BOT_Y : MAIN_Y;
-    pts.push({ x: anchorX(from), y: railY });
-  } else {
-    railY = MAIN_Y;
-    pts.push({ x: start.x, y: MAIN_Y });
+    cur = doorOut(from);
+    pts.push(cur);
   }
-  const targetRail = to.bottom ? BOT_Y : MAIN_Y;
-  if (railY !== targetRail) {
-    pts.push({ x: VERT_X, y: railY });
-    pts.push({ x: VERT_X, y: targetRail });
+  const goal = doorOut(to);
+  for (const t of corners(bfsPath(tileOf(cur), tileOf(goal)))) {
+    pts.push({ x: (t.x + 0.5) * TILE, y: (t.y + 0.5) * TILE });
   }
-  pts.push({ x: anchorX(to), y: targetRail });
-  pts.push(doorOut(to));
+  pts.push(goal);
   return dedupe(pts);
 }
 
@@ -225,20 +332,20 @@ export class World {
       prefs,
     });
     this.friends = [
-      mk("maya", "Maya", "#e04a4a", "#2a1b12", "dining", 999999, { gym: 5, dining: 1, union: 1 }),
-      mk("dev", "Dev", "#4a7fd6", "#111318", "library", 14000, { library: 4, pods: 2, dining: 1 }),
-      mk("sam", "Sam", "#3fae62", "#5b3a1e", "dining", 20000, { dining: 2, union: 2, gym: 1 }),
-      mk("priya", "Priya", "#9a5bd6", "#17111e", "pods", 26000, { pods: 3, library: 2, union: 1 }),
-      mk("jordan", "Jordan", "#e0913f", "#3d2c16", "union", 32000, { union: 3, dining: 2, gym: 1 }),
+      mk("maya", "Maya", "#e04a4a", "#2a1b12", "brittain", 999999, { crc: 5, brittain: 1, studentcenter: 1 }),
+      mk("dev", "Dev", "#4a7fd6", "#111318", "library", 14000, { library: 4, clough: 2, klaus: 2, coc: 1 }),
+      mk("sam", "Sam", "#3fae62", "#5b3a1e", "brittain", 20000, { brittain: 2, westvillage: 2, studentcenter: 2, crc: 1 }),
+      mk("priya", "Priya", "#9a5bd6", "#17111e", "clough", 26000, { clough: 3, library: 2, coc: 2, klaus: 1 }),
+      mk("jordan", "Jordan", "#e0913f", "#3d2c16", "studentcenter", 32000, { studentcenter: 3, stadium: 2, ferst: 1, brittain: 1 }),
     ];
     this.player = {
-      pos: { x: 18 * TILE, y: 13.5 * TILE },
+      pos: { x: 30.5 * TILE, y: 15.5 * TILE }, // Campanile plaza
       state: "idle", buildingId: null,
       route: [], routeI: 0, ghost: false,
       shirt: "#f2d94e", hair: "#17111e",
     };
-    // demo beat: Maya heads to the gym a few seconds in
-    this.forced.push({ at: now + 4500, friendId: "maya", targetId: "gym" });
+    // demo beat: Maya heads to the CRC a few seconds in
+    this.forced.push({ at: now + 4500, friendId: "maya", targetId: "crc" });
   }
 
   friendsInside(buildingId: string): Friend[] {

@@ -146,7 +146,7 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
         const expired = t.filter((x) => x.expiresAt <= now);
         for (const e of expired) {
           if (e.serendipity) {
-            pushFeed("system", "\u{1F4A8} The fountain window vanished. Next one tomorrow.");
+            pushFeed("system", "\u{1F4A8} The Campanile window vanished. Next one tomorrow.");
           }
         }
         return t.filter((x) => x.expiresAt > now);
@@ -160,10 +160,10 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
     const firstName = profile.name.split(" ")[0];
     const favorite = topVibe(profile);
     const spotHint: Record<string, string> = {
-      study: "Moffitt 3rd has open tables",
-      gym: "Rec Gym is quiet right now",
-      food: "Dining Hall is filling up",
-      chaos: "Luma open mic at Union tonight",
+      study: "Clough has open tables",
+      gym: "the CRC is quiet right now",
+      food: "Brittain is filling up",
+      chaos: "Luma open mic at the Student Center tonight",
     };
     pushStaged([
       {
@@ -175,7 +175,7 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
     if (!profile.privacy.serendipityOptIn) return;
     const t = setTimeout(() => {
       pushToast(
-        "\u{26A1} Serendipity: 3 people free near the fountain, 20-min window",
+        "\u{26A1} Serendipity: 3 people free near the Campanile, 20-min window",
         60000,
         true,
       );
@@ -214,12 +214,12 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
       const why = social ? `matches your "${social.label}" pref` : "looks like your kind of night";
       stages.push({
         delay: 5400, kind: "luma",
-        text: `Luma: 'Open Mic @ Union, 8 PM' ${why} \u{2014} auto-RSVP'd \u{2713}`,
+        text: `Luma: 'Open Mic @ Student Center, 8 PM' ${why} \u{2014} auto-RSVP'd \u{2713}`,
       });
     } else if (b.vibe === "study") {
       stages.push({
         delay: 5400, kind: "agent",
-        text: `Held a table on ${b.name} for 25 min. Releases automatically if you no-show.`,
+        text: `Held a table at ${b.name} for 25 min. Releases automatically if you no-show.`,
       });
     }
     pushStaged(stages);
@@ -250,10 +250,10 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
   const acceptSerendipity = (id: number) => {
     setToasts((t) => t.filter((x) => x.id !== id));
     pushStaged([
-      { delay: 0, kind: "agent", text: "Locked it. \u{26F2} Fountain hang in 5 — telling the other 3." },
-      { delay: 1400, kind: "cal", text: `"Fountain serendipity" \u{2192} Google Calendar, 20 min \u{2713}` },
+      { delay: 0, kind: "agent", text: "Locked it. \u{26F2} Campanile hang in 5 — telling the other 3." },
+      { delay: 1400, kind: "cal", text: `"Campanile serendipity" \u{2192} Google Calendar, 20 min \u{2713}` },
     ]);
-    pushToast("Serendipity accepted — see you at the fountain");
+    pushToast("Serendipity accepted — see you at the Campanile");
   };
 
   const selected = selectedId ? buildingById(selectedId) : null;
@@ -265,7 +265,7 @@ function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void 
       <div className="map-col">
         <header className="topbar">
           <span className="logo">🗺 ConnectMaxxer</span>
-          <span className="tagline">the campus map that texts your friends for you</span>
+          <span className="tagline">the Georgia Tech map that texts your friends for you</span>
           <button className={`ghost-btn ${ghost ? "on" : ""}`} onClick={toggleGhost}>
             {ghost ? "\u{1F47B} GHOST ON" : "\u{1F47B} GHOST OFF"}
           </button>
