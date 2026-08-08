@@ -32,7 +32,7 @@ export interface Building {
   openSpots: number | null; // open tables/racks, null = untracked
 }
 
-export type Tile = "grass" | "path" | "tree" | "water" | "flower" | "rim";
+export type Tile = "grass" | "path" | "tree" | "water" | "flower" | "rim" | "bush";
 
 export interface Friend {
   id: string;
@@ -71,31 +71,31 @@ export const BUILDINGS: Building[] = [
   {
     id: "gym", name: "Rec Gym", vibe: "gym", emoji: "\u{1F4AA}",
     x: 2, y: 2, w: 7, h: 5,
-    roof: "#5b6273", roofDark: "#454b59", wall: "#8d93a3",
+    roof: "#6e7b8a", roofDark: "#4f5966", wall: "#a39a88",
     bottom: false, base: 3, openSpots: null,
   },
   {
     id: "pods", name: "Study Pods", vibe: "study", emoji: "\u{1F4DA}",
     x: 13, y: 2, w: 6, h: 4,
-    roof: "#4caf6d", roofDark: "#37804f", wall: "#e8ddc0",
+    roof: "#c9a04e", roofDark: "#987434", wall: "#e8ddc0",
     bottom: false, base: 1, openSpots: 3,
   },
   {
     id: "library", name: "Moffitt 3rd", vibe: "study", emoji: "\u{1F4DA}",
     x: 23, y: 2, w: 7, h: 6,
-    roof: "#4a7fd6", roofDark: "#355d9e", wall: "#e8ddc0",
+    roof: "#8a5a3a", roofDark: "#654028", wall: "#e8dcc0",
     bottom: false, base: 5, openSpots: 2,
   },
   {
     id: "dining", name: "Dining Hall", vibe: "food", emoji: "\u{1F355}",
     x: 2, y: 13, w: 7, h: 5,
-    roof: "#d65a4a", roofDark: "#9e3f35", wall: "#f0e2c8",
+    roof: "#b5493c", roofDark: "#84352c", wall: "#f0e2c8",
     bottom: true, base: 4, openSpots: null,
   },
   {
     id: "union", name: "Student Union", vibe: "chaos", emoji: "\u{1F389}",
     x: 23, y: 13, w: 7, h: 5,
-    roof: "#e0913f", roofDark: "#a86a2b", wall: "#efe3cb",
+    roof: "#c9853f", roofDark: "#95612b", wall: "#efe3cb",
     bottom: true, base: 2, openSpots: null,
   },
 ];
@@ -148,6 +148,8 @@ export function buildTiles(): Tile[][] {
   t[11][13] = "water"; t[11][14] = "water";
   t[9][13] = "rim"; t[9][14] = "rim";
   t[12][13] = "rim"; t[12][14] = "rim";
+  t[10][12] = "rim"; t[11][12] = "rim";
+  t[10][15] = "rim"; t[11][15] = "rim";
   // perimeter trees + scattered trees/flowers on grass
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
@@ -159,6 +161,7 @@ export function buildTiles(): Tile[][] {
       if (inBuilding) continue;
       const h = hash(x, y);
       if (edge || h % 19 === 0) t[y][x] = "tree";
+      else if (h % 23 === 0) t[y][x] = "bush";
       else if (h % 13 === 0) t[y][x] = "flower";
     }
   }
