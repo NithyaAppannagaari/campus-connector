@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { draw } from "./game/render";
 import { Building, H, TILE, W, World, buildingById } from "./game/world";
+import Onboarding from "./onboarding/Onboarding";
+import {
+  UserProfile,
+  clearProfile,
+  loadProfile,
+  prefSummary,
+  saveProfile,
+  socialRhythm,
+  topVibe,
+  vibeRead,
+} from "./profile";
 
 type FeedKind = "agent" | "friend" | "cal" | "luma" | "alert" | "system";
 interface FeedItem {
@@ -32,15 +43,46 @@ function timeLabel(): string {
 }
 
 export default function App() {
+  const [profile, setProfile] = useState<UserProfile | null>(() => loadProfile());
+
+  if (!profile) {
+    return (
+      <Onboarding
+        onComplete={(p) => {
+          saveProfile(p);
+          setProfile(p);
+        }}
+      />
+    );
+  }
+
+  return (
+    <MapApp
+      key={profile.onboardedAt}
+      profile={profile}
+      onRedo={() => {
+        clearProfile();
+        setProfile(null);
+      }}
+    />
+  );
+}
+
+function MapApp({ profile, onRedo }: { profile: UserProfile; onRedo: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const worldRef = useRef<World | null>(null);
-  if (!worldRef.current) worldRef.current = new World(performance.now());
+  if (!worldRef.current) {
+    worldRef.current = new World(performance.now());
+    worldRef.current.player.shirt = profile.avatar.shirt;
+    worldRef.current.player.hair = profile.avatar.hair;
+    worldRef.current.player.ghost = profile.privacy.ghostByDefault;
+  }
   const world = worldRef.current;
 
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [ghost, setGhost] = useState(false);
+  const [ghost, setGhost] = useState(profile.privacy.ghostByDefault);
   const [, setPulse] = useState(0); // 1s re-render for live counts / countdowns
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selectedId;
@@ -113,12 +155,24 @@ export default function App() {
     return () => clearInterval(iv);
   }, [pushFeed]);
 
-  // opening beats + serendipity event
+  // opening beats + serendipity event, personalized from the onboarding profile
   useEffect(() => {
+    const firstName = profile.name.split(" ")[0];
+    const favorite = topVibe(profile);
+    const spotHint: Record<string, string> = {
+      study: "Moffitt 3rd has open tables",
+      gym: "Rec Gym is quiet right now",
+      food: "Dining Hall is filling up",
+      chaos: "Luma open mic at Union tonight",
+    };
     pushStaged([
-      { delay: 400, kind: "agent", text: "Morning read: 2 friends free after 6, Moffitt 3rd has open tables, Luma open mic at Union tonight." },
-      { delay: 1600, kind: "agent", text: "Tonight's vibe forecast: \u{1F3B2} board-game energy, not leetcode." },
+      {
+        delay: 400, kind: "agent",
+        text: `Morning read for ${firstName}: 2 friends free after 6, ${spotHint[favorite]}.`,
+      },
+      { delay: 1600, kind: "agent", text: `Tonight's vibe forecast: ${vibeRead(profile)}.` },
     ]);
+    if (!profile.privacy.serendipityOptIn) return;
     const t = setTimeout(() => {
       pushToast(
         "\u{26A1} Serendipity: 3 people free near the fountain, 20-min window",
@@ -127,7 +181,7 @@ export default function App() {
       );
     }, 35000);
     return () => clearTimeout(t);
-  }, [pushStaged, pushToast]);
+  }, [profile, pushStaged, pushToast]);
 
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -156,9 +210,11 @@ export default function App() {
       { delay: 4000, kind: "cal", text: `"${b.name} w/ ${buddy}" \u{2192} Google Calendar, 6:30\u{2013}7:30 PM \u{2713}` },
     ];
     if (b.vibe === "chaos" || b.vibe === "food") {
+      const social = socialRhythm(profile);
+      const why = social ? `matches your "${social.label}" pref` : "looks like your kind of night";
       stages.push({
         delay: 5400, kind: "luma",
-        text: "Luma: 'Open Mic @ Union, 8 PM' matches your Thu-social pref \u{2014} auto-RSVP'd \u{2713}",
+        text: `Luma: 'Open Mic @ Union, 8 PM' ${why} \u{2014} auto-RSVP'd \u{2713}`,
       });
     } else if (b.vibe === "study") {
       stages.push({
@@ -249,9 +305,12 @@ export default function App() {
 
       <aside className="sidebar">
         <div className="card pref-card">
-          <div className="card-title">PREFERENCE GRAPH</div>
-          <p>Deep work Mon AM · social Thu PM · never gym after 9.</p>
-          <p className="pref-read">Tonight's read: 🎲 board-game energy</p>
+          <div className="pref-head">
+            <div className="card-title">{profile.name.toUpperCase()}'S PREFERENCE GRAPH</div>
+            <button className="pref-edit" onClick={onRedo}>EDIT</button>
+          </div>
+          <p>{prefSummary(profile)}</p>
+          <p className="pref-read">Tonight's read: {vibeRead(profile)}</p>
         </div>
 
         {selected ? (
