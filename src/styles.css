@@ -421,6 +421,24 @@ body,
   flex: 1;
 }
 
+.feed-link {
+  display: inline-block;
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  padding: 3px 6px;
+  margin-left: 2px;
+  background: #4a7fd6;
+  color: #0a1428;
+  border-radius: 4px;
+  text-decoration: none;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+
+.feed-link:hover {
+  background: #6b99e3;
+}
+
 .feed-time {
   font-size: 9px;
   color: var(--dim);

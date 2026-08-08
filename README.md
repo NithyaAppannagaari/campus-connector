@@ -32,7 +32,8 @@ Open the printed localhost URL. `npm run build` produces a static bundle in `dis
 | Public vs. private spaces (private never notifies) | Real |
 | Open study/public spots: hours, open/closing/closed, drop-in list | Real simulation on the campus clock |
 | Serendipity matching + points/streak rewards | Real UI loop — persona pool stands in for real user matching |
-| Agent feed: DM friend, Luma RSVP, Google Calendar | Theater — staged messages; swap in real MCP/API calls next |
+| Google Calendar | Real — every "→ Google Calendar" feed line has an ADD ↗ button that opens a prefilled event on your actual calendar (no OAuth needed) |
+| Agent feed: DM friend, Luma RSVP | Theater — staged messages; swap in real MCP/API calls next |
 | Preference graph | Theater — static "read", becomes learned from join/skip/leave signals |
 
 Next steps to make the theater real: QR/manual check-in endpoint per building, Google Calendar + Luma integrations behind the same feed events, and a tiny backend (or Supabase) for the friend circle.

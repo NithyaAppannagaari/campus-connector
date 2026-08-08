@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { draw } from "./game/render";
 import { Building, H, TILE, W, World, buildingById, fmtClock } from "./game/world";
+import { fmtRange, gcalUrl, inMinutes } from "./calendar";
 import { Settings, checkNotify, inQuietHours, loadSettings, saveSettings } from "./settings";
 import { awardAccept, breakStreak, loadRewards, saveRewards } from "./rewards";
 import { SerendipityEvent, describeSerendipity, generateSerendipity } from "./serendipity";
@@ -14,6 +15,7 @@ interface FeedItem {
   kind: FeedKind;
   text: string;
   at: string;
+  href?: string;
 }
 interface Toast {
   id: number;
@@ -35,6 +37,21 @@ let nextId = 1;
 
 function timeLabel(): string {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+// vibe -> concise activity name for calendar event titles
+const VIBE_ACTIVITY: Record<Building["vibe"], string> = {
+  gym: "Workout",
+  study: "Study session",
+  food: "Meal",
+  chaos: "Hangout",
+};
+
+/** "Maya", "Maya & Dev", or "Maya +2" */
+function nameList(names: string[]): string {
+  if (names.length === 0) return "your circle";
+  if (names.length <= 2) return names.join(" & ");
+  return `${names[0]} +${names.length - 1}`;
 }
 
 export default function App() {
@@ -61,13 +78,15 @@ export default function App() {
   useEffect(() => saveSettings(settings), [settings]);
   useEffect(() => saveRewards(rewards), [rewards]);
 
-  const pushFeed = useCallback((kind: FeedKind, text: string) => {
-    setFeed((f) => [...f, { id: nextId++, kind, text, at: timeLabel() }]);
+  const pushFeed = useCallback((kind: FeedKind, text: string, href?: string) => {
+    setFeed((f) => [...f, { id: nextId++, kind, text, at: timeLabel(), href }]);
   }, []);
 
   const pushStaged = useCallback(
-    (items: { delay: number; kind: FeedKind; text: string }[]) => {
-      const timers = items.map((it) => window.setTimeout(() => pushFeed(it.kind, it.text), it.delay));
+    (items: { delay: number; kind: FeedKind; text: string; href?: string }[]) => {
+      const timers = items.map((it) =>
+        window.setTimeout(() => pushFeed(it.kind, it.text, it.href), it.delay),
+      );
       return () => timers.forEach(clearTimeout);
     },
     [pushFeed],
@@ -194,10 +213,24 @@ export default function App() {
         ? `You're already at ${b.name} — looping in your circle.`
         : `On it. Heading to ${b.name} — closing the loop for you.`,
     );
-    const stages: { delay: number; kind: FeedKind; text: string }[] = [
+    const start = inMinutes(10);
+    const title = `${VIBE_ACTIVITY[b.vibe]} w/ ${nameList(friends.map((f) => f.name))}`;
+    const stages: { delay: number; kind: FeedKind; text: string; href?: string }[] = [
       { delay: 1200, kind: "agent", text: `DM \u{2192} ${buddy}: "Heading to ${b.name}, meet in 10?"` },
       { delay: 2600, kind: "friend", text: `${buddy}: "yess come thru \u{1F525}"` },
-      { delay: 4000, kind: "cal", text: `"${b.name} w/ ${buddy}" \u{2192} Google Calendar, 6:30\u{2013}7:30 PM \u{2713}` },
+      {
+        delay: 4000, kind: "cal",
+        text: `"${title}" \u{2192} Google Calendar, ${fmtRange(start, 60)} \u{2713}`,
+        href: gcalUrl({
+          title,
+          start, durationMin: 60,
+          location: `${b.name}, campus`,
+          details: [
+            `${VIBE_ACTIVITY[b.vibe]} with ${friends.map((f) => f.name).join(", ") || "your circle"} at ${b.name}.`,
+            `Auto-scheduled by ConnectMaxxer \u{1F5FA}`,
+          ].join("\n"),
+        }),
+      },
     ];
     if (b.vibe === "chaos" || b.vibe === "food") {
       stages.push({
@@ -215,10 +248,23 @@ export default function App() {
 
   const createEvent = (b: Building) => {
     pushFeed("agent", `Drafting a pickup event at ${b.name}...`);
+    const start = inMinutes(60);
     pushStaged([
       { delay: 1300, kind: "luma", text: `Created Luma: "Pickup @ ${b.name}, 7 PM" \u{2014} invite sent to your circle \u{2713}` },
       { delay: 2600, kind: "friend", text: `Priya: "omg yes" \u{00B7} Dev: "in \u{1F44D}"` },
-      { delay: 3900, kind: "cal", text: `Added to Google Calendar + 2 friends' calendars \u{2713}` },
+      {
+        delay: 3900, kind: "cal",
+        text: `"Pickup @ ${b.name}" \u{2192} Google Calendar, ${fmtRange(start, 60)} \u{2713}`,
+        href: gcalUrl({
+          title: `Pickup @ ${b.name}`,
+          start, durationMin: 60,
+          location: `${b.name}, campus`,
+          details: [
+            `Open pickup event at ${b.name} \u{2014} your circle is invited (Priya & Dev are in).`,
+            `Luma invite sent \u{00B7} drafted by ConnectMaxxer \u{1F5FA}`,
+          ].join("\n"),
+        }),
+      },
     ]);
     pushToast(`Event drafted at ${b.name} — circle pinged`);
   };
@@ -246,9 +292,25 @@ export default function App() {
     pushToast(
       `+${gained} \u{26A1}${newPeople > 0 ? ` — you're meeting ${newPeople} new ${newPeople === 1 ? "person" : "people"}` : ""}`,
     );
+    const start = inMinutes(5);
+    const hobbyName = ev.hobby.charAt(0).toUpperCase() + ev.hobby.slice(1);
+    const title = `${hobbyName} meetup w/ ${nameList(ev.people.map((p) => p.name))}`;
     pushStaged([
       { delay: 0, kind: "agent", text: `Locked it. Telling ${names} you're coming — intros handled.` },
-      { delay: 1400, kind: "cal", text: `"${ev.hobby} hang @ ${b.name}" \u{2192} Google Calendar, ${ev.windowMin} min \u{2713}` },
+      {
+        delay: 1400, kind: "cal",
+        text: `"${title}" \u{2192} Google Calendar, ${ev.windowMin} min \u{2713}`,
+        href: gcalUrl({
+          title,
+          start, durationMin: ev.windowMin,
+          location: `${b.name}, campus`,
+          details: [
+            `Serendipity hangout at ${b.name} \u{2014} ${ev.windowMin}-min window.`,
+            `Meeting ${names}, matched on ${ev.hobby}.`,
+            `Set up by ConnectMaxxer \u{26A1}`,
+          ].join("\n"),
+        }),
+      },
     ]);
   };
 
@@ -388,7 +450,17 @@ export default function App() {
             {feed.map((f) => (
               <div key={f.id} className={`feed-item ${f.kind}`}>
                 <span className="feed-icon">{KIND_ICON[f.kind]}</span>
-                <span className="feed-text">{f.text}</span>
+                <span className="feed-text">
+                  {f.text}
+                  {f.href && (
+                    <>
+                      {" "}
+                      <a className="feed-link" href={f.href} target="_blank" rel="noreferrer">
+                        ADD {"\u2197"}
+                      </a>
+                    </>
+                  )}
+                </span>
                 <span className="feed-time">{f.at}</span>
               </div>
             ))}
